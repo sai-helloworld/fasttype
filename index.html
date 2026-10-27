@@ -6,6 +6,10 @@
     <meta name="description" content="FastType Luxe - High-precision luxury typing test, weakness diagnosis, keyboard heatmap, and analytics platform.">
     <title>FastType Luxe — State of the Art Typing Experience</title>
     
+    <!-- Favicon (matching brand logo) -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="alternate icon" href="favicon.svg">
+    
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -144,13 +148,31 @@
                     </button>
                     
                     <!-- Pacer with custom WPM -->
-                    <div style="display: flex; align-items: center; background: rgba(0,0,0,0.25); border-radius: var(--radius-full);">
-                        <button class="tool-pill" id="togglePacer" title="Toggle Target Ghost Pacer">
-                            🎯 Pacer (<span id="pacerCurrentWpmDisplay">70</span>)
-                        </button>
-                        <button class="tool-pill" id="btnCustomPacerWpm" title="Edit custom target WPM pace" style="padding: 0.35rem 0.5rem; font-size: 0.75rem;">
-                            ✏️
-                        </button>
+                    <div class="pacer-control-wrapper" id="pacerControlWrapper">
+                        <div class="pacer-pill-group" id="pacerDisplayGroup">
+                            <button class="tool-pill" id="togglePacer" title="Toggle Target Ghost Pacer">
+                                🎯 Pacer (<span id="pacerCurrentWpmDisplay">70</span>)
+                            </button>
+                            <button class="tool-pill" id="btnCustomPacerWpm" title="Edit custom target WPM pace" aria-label="Edit target WPM">
+                                ✏️
+                            </button>
+                        </div>
+                        <div class="pacer-inline-editor" id="pacerInlineEditor" style="display: none;">
+                            <span class="pacer-editor-icon">🎯</span>
+                            <input type="number" id="pacerInlineInput" min="20" max="250" value="70" class="pacer-web-input" placeholder="WPM" aria-label="Target WPM">
+                            <span class="pacer-editor-unit">WPM</span>
+                            <button type="button" class="pacer-confirm-btn" id="pacerConfirmBtn" title="Apply Target WPM">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </button>
+                            <button type="button" class="pacer-cancel-btn" id="pacerCancelBtn" title="Cancel">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

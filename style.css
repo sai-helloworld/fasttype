@@ -325,6 +325,123 @@ header.app-header {
     height: 14px;
 }
 
+/* Pacer Control Pill & Inline Webpage Editor */
+.pacer-control-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative;
+}
+
+.pacer-pill-group {
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-full);
+}
+
+.pacer-inline-editor {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(18, 21, 30, 0.95);
+    border: 1px solid var(--accent-gold);
+    box-shadow: 0 0 14px var(--accent-gold-glow);
+    border-radius: var(--radius-full);
+    padding: 2px 6px 2px 10px;
+    animation: fadeInPacer 0.16s ease-out;
+}
+
+@keyframes fadeInPacer {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.pacer-editor-icon {
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.pacer-web-input {
+    width: 52px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: var(--accent-gold);
+    font-family: var(--font-mono);
+    font-size: 0.825rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 3px 4px;
+    outline: none;
+    transition: var(--transition-smooth);
+}
+
+.pacer-web-input:focus {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 8px var(--accent-gold-glow);
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.pacer-web-input::-webkit-outer-spin-button,
+.pacer-web-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.pacer-web-input[type=number] {
+    -moz-appearance: textfield;
+}
+
+.pacer-editor-unit {
+    font-size: 0.725rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.pacer-confirm-btn,
+.pacer-cancel-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    padding: 0;
+}
+
+.pacer-confirm-btn {
+    background: var(--accent-gold);
+    color: #08090d;
+}
+
+.pacer-confirm-btn:hover {
+    background: var(--accent-gold-hover);
+    transform: scale(1.08);
+}
+
+.pacer-cancel-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+}
+
+.pacer-cancel-btn:hover {
+    background: rgba(244, 63, 94, 0.2);
+    color: var(--accent-rose);
+    transform: scale(1.08);
+}
+
+.pacer-confirm-btn svg,
+.pacer-cancel-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
 /* Typing Arena */
 .typing-arena-container {
     flex: 1;
@@ -633,7 +750,7 @@ body.caret-underline .caret {
     gap: 0.4rem;
 }
 
-/* Dim UI during typing */
+/* Dim UI during typing in typing arena */
 body.is-typing header.app-header,
 body.is-typing .test-toolbar,
 body.is-typing .typing-footer-actions,
@@ -641,6 +758,15 @@ body.is-typing .speed-booster-bar {
     opacity: 0.25;
     pointer-events: none;
     transition: opacity 0.4s ease;
+}
+
+/* Guard: Header & navigation must always stay clickable in analytics view or when modal is open */
+body:has(#analyticsView.active) header.app-header,
+.analytics-view-active header.app-header,
+.results-modal-backdrop.active ~ .app-wrapper header.app-header,
+.settings-modal-backdrop.active ~ .app-wrapper header.app-header {
+    opacity: 1 !important;
+    pointer-events: auto !important;
 }
 
 /* ==========================================================================

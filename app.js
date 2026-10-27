@@ -89,6 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
         togglePacer: document.getElementById('togglePacer'),
         btnCustomPacerWpm: document.getElementById('btnCustomPacerWpm'),
         pacerCurrentWpmDisplay: document.getElementById('pacerCurrentWpmDisplay'),
+        pacerControlWrapper: document.getElementById('pacerControlWrapper'),
+        pacerDisplayGroup: document.getElementById('pacerDisplayGroup'),
+        pacerInlineEditor: document.getElementById('pacerInlineEditor'),
+        pacerInlineInput: document.getElementById('pacerInlineInput'),
+        pacerConfirmBtn: document.getElementById('pacerConfirmBtn'),
+        pacerCancelBtn: document.getElementById('pacerCancelBtn'),
 
         // Accelerators & Status
         speedBoosterBar: document.getElementById('speedBoosterBar'),
@@ -337,6 +343,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keystroke & Typing Mechanics
     // -------------------------------------------------------------
     function handleKeyDown(e) {
+        // 1. Guard against keystrokes when not in typing arena (e.g. Analytics view)
+        if (elements.analyticsView && elements.analyticsView.classList.contains('active')) {
+            return;
+        }
+        if (elements.typingView && elements.typingView.style.display === 'none') {
+            return;
+        }
+
+        // 2. Guard against keystrokes when settings or results modal is active
+        if ((elements.settingsModal && elements.settingsModal.classList.contains('active')) ||
+            (elements.resultsModal && elements.resultsModal.classList.contains('active'))) {
+            return;
+        }
+
+        // 3. Guard against keystrokes when user is typing in any webpage input/textarea
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+            return;
+        }
+
         if (e.key === 'Tab') {
             e.preventDefault();
             return;
@@ -416,11 +442,13 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentWordIndex++;
             state.currentCharIndex = 0;
 
-            // Check completion for word count limited modes
+            // Check completion for word count limited modes or drill mode
             const isWordLimitedMode = (state.modeType === 'words' && state.currentWordIndex >= state.wordsLimit) ||
                                       (state.modeType === 'quotes' && state.currentWordIndex >= state.words.length) ||
                                       (state.modeType === 'burst' && state.currentWordIndex >= 20) ||
-                                      (state.modeType === 'symbols' && state.currentWordIndex >= 30);
+                                      (state.modeType === 'symbols' && state.currentWordIndex >= 30) ||
+                                      (state.modeType === 'drill' && state.currentWordIndex >= state.words.length) ||
+                                      (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex >= state.words.length);
 
             if (isWordLimitedMode) {
                 finishTest();
@@ -533,7 +561,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const isLastWord = (state.modeType === 'words' && state.currentWordIndex === state.wordsLimit - 1) ||
                                (state.modeType === 'quotes' && state.currentWordIndex === state.words.length - 1) ||
                                (state.modeType === 'burst' && state.currentWordIndex === 19) ||
-                               (state.modeType === 'symbols' && state.currentWordIndex === 29);
+                               (state.modeType === 'symbols' && state.currentWordIndex === 29) ||
+                               (state.modeType === 'drill' && state.currentWordIndex === state.words.length - 1) ||
+                               (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex === state.words.length - 1);
 
             if (isLastWord && state.currentCharIndex >= currentWordStr.length) {
                 finishTest();
@@ -616,6 +646,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.liveCountdown.textContent = wordsLeft;
             } else if (state.modeType === 'zen') {
                 elements.liveCountdown.textContent = `${state.elapsedSeconds}s`;
+            }
+
+            // In drill mode, also finish test immediately if all words are completed
+            if (state.modeType === 'drill' && state.currentWordIndex >= state.words.length) {
+                finishTest();
+                return;
             }
 
             // Ghost pacer positioning
@@ -711,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
             timestamp: new Date().toISOString(),
             mode: state.modeType,
             duration: state.modeType === 'time' ? state.timeLimit : null,
-            targetWords: state.modeType === 'words' ? state.wordsLimit : null,
+            targetWords: state.modeType === 'words' ? state.wordsLimit : (state.modeType === 'drill' ? state.words.length : null),
             actualDuration: actualDuration,
             wpm: netWpm,
             rawWpm: rawWpm,
@@ -888,6 +924,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Analytics Dashboard & Biomechanical Diagnostics
     // -------------------------------------------------------------
     function openAnalyticsDashboard() {
+        document.body.classList.remove('is-typing');
+        document.body.classList.add('analytics-view-active');
+        if (state.hasStarted && !state.isFinished) {
+            clearInterval(state.timerInterval);
+            state.hasStarted = false;
+        }
         elements.typingView.style.display = 'none';
         elements.analyticsView.classList.add('active');
         elements.navTypingView.classList.remove('active');
@@ -897,6 +939,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function openTypingArena() {
+        document.body.classList.remove('analytics-view-active');
+        document.body.classList.remove('is-typing');
         elements.analyticsView.classList.remove('active');
         elements.typingView.style.display = 'flex';
         elements.navAnalyticsView.classList.remove('active');
@@ -1375,17 +1419,81 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Custom WPM prompt on pencil icon
-        elements.btnCustomPacerWpm.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const input = prompt('Enter your custom target Ghost Pacer WPM (20 - 250):', state.ghostPacerWpm);
-            if (input !== null && !isNaN(input) && input.trim() !== '') {
-                const targetVal = Math.max(20, Math.min(250, parseInt(input.trim(), 10)));
+        // Webpage Input Field for custom Ghost Pacer WPM (Replaces prompt dialog)
+        function openPacerEditor() {
+            if (elements.pacerDisplayGroup && elements.pacerInlineEditor) {
+                elements.pacerDisplayGroup.style.display = 'none';
+                elements.pacerInlineEditor.style.display = 'flex';
+                elements.pacerInlineInput.value = state.ghostPacerWpm || 70;
+                elements.pacerInlineInput.focus();
+                elements.pacerInlineInput.select();
+            }
+        }
+
+        function closePacerEditor() {
+            if (elements.pacerDisplayGroup && elements.pacerInlineEditor) {
+                elements.pacerInlineEditor.style.display = 'none';
+                elements.pacerDisplayGroup.style.display = 'flex';
+            }
+        }
+
+        function savePacerCustomWpm() {
+            if (!elements.pacerInlineInput) return;
+            const valStr = elements.pacerInlineInput.value.trim();
+            const parsed = parseInt(valStr, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+                const targetVal = Math.max(20, Math.min(250, parsed));
                 state.ghostPacer = true;
                 state.ghostPacerWpm = targetVal;
                 window.dataManager.saveSettings({ ghostPacer: true, ghostPacerWpm: targetVal });
                 applySettings(window.dataManager.settings);
                 resetTest(false);
+            }
+            closePacerEditor();
+            focusHiddenInput();
+        }
+
+        elements.btnCustomPacerWpm.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openPacerEditor();
+        });
+
+        if (elements.pacerConfirmBtn) {
+            elements.pacerConfirmBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                savePacerCustomWpm();
+            });
+        }
+
+        if (elements.pacerCancelBtn) {
+            elements.pacerCancelBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closePacerEditor();
+                focusHiddenInput();
+            });
+        }
+
+        if (elements.pacerInlineInput) {
+            elements.pacerInlineInput.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    savePacerCustomWpm();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closePacerEditor();
+                    focusHiddenInput();
+                }
+            });
+        }
+
+        // Close pacer inline editor when clicking outside
+        document.addEventListener('click', (e) => {
+            if (elements.pacerControlWrapper && 
+                elements.pacerInlineEditor && 
+                elements.pacerInlineEditor.style.display !== 'none' && 
+                !elements.pacerControlWrapper.contains(e.target)) {
+                savePacerCustomWpm();
             }
         });
 

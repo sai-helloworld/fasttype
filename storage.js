@@ -46,6 +46,129 @@ const TYPING_RANKS = [
     { title: 'Transcendent', minWpm: 130, maxWpm: 999, badge: '🌌', next: 'Max Rank' }
 ];
 
+// Worldwide Typing Benchmark Tiers based on standard normal distribution (Mean: 41 WPM, StdDev: 16.5 WPM)
+const GLOBAL_BENCHMARK_TIERS = [
+    {
+        name: 'Top 1% Global Apex',
+        badge: '🌌',
+        range: '110+ WPM',
+        minWpm: 110,
+        maxWpm: 999,
+        percentile: 'Top 1%',
+        desc: 'Apex worldwide tier (Faster than 99% of global typists)'
+    },
+    {
+        name: 'Top 5% Grandmaster',
+        badge: '💎',
+        range: '85 – 109 WPM',
+        minWpm: 85,
+        maxWpm: 109,
+        percentile: 'Top 5%',
+        desc: 'Professional high-speed transcription & power typist velocity'
+    },
+    {
+        name: 'Top 10% Master',
+        badge: '👑',
+        range: '72 – 84 WPM',
+        minWpm: 72,
+        maxWpm: 84,
+        percentile: 'Top 10%',
+        desc: 'Elite touch typist, nearly 2x faster than international average'
+    },
+    {
+        name: 'Top 25% Proficient',
+        badge: '⚡',
+        range: '56 – 71 WPM',
+        minWpm: 56,
+        maxWpm: 71,
+        percentile: 'Top 25%',
+        desc: 'Upper quartile velocity; swift and agile everyday developer / writer'
+    },
+    {
+        name: 'Top 50% Global Median',
+        badge: '🎯',
+        range: '41 – 55 WPM',
+        minWpm: 41,
+        maxWpm: 55,
+        percentile: 'Top 50%',
+        desc: 'Global Median standard across hundreds of millions of computer typists'
+    },
+    {
+        name: 'Lower 50% Developing',
+        badge: '🌱',
+        range: '< 41 WPM',
+        minWpm: 0,
+        maxWpm: 40,
+        percentile: 'Lower 50%',
+        desc: 'Foundation stage with high potential for rapid gains through muscle memory'
+    }
+];
+
+function calculateGlobalBenchmark(wpm) {
+    wpm = Math.max(0, Math.round(Number(wpm) || 0));
+    const mean = 41;
+    const stdDev = 16.5;
+
+    if (wpm === 0) {
+        return {
+            wpm: 0,
+            percentile: 0,
+            fasterThanPct: 0,
+            topPct: 100,
+            topPctLabel: 'Unranked',
+            tier: GLOBAL_BENCHMARK_TIERS[5],
+            tierIndex: 5,
+            deltaWpm: -41,
+            deltaPct: -100,
+            nextTier: GLOBAL_BENCHMARK_TIERS[4],
+            wpmToNext: 41,
+            tiers: GLOBAL_BENCHMARK_TIERS
+        };
+    }
+
+    const z = (wpm - mean) / stdDev;
+    const t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
+    const d = 0.3989422804014327 * Math.exp(-z * z / 2.0);
+    let p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+    let cdf = (z >= 0) ? (1.0 - p) : p;
+
+    let fasterThanPct = Math.min(99.9, Math.max(0.1, +(cdf * 100).toFixed(1)));
+    let topPct = +(100 - fasterThanPct).toFixed(1);
+    if (topPct < 0.1) topPct = 0.1;
+
+    let tierIndex = 5;
+    for (let i = 0; i < GLOBAL_BENCHMARK_TIERS.length; i++) {
+        if (wpm >= GLOBAL_BENCHMARK_TIERS[i].minWpm) {
+            tierIndex = i;
+            break;
+        }
+    }
+
+    const currentTier = GLOBAL_BENCHMARK_TIERS[tierIndex];
+    const nextTier = tierIndex > 0 ? GLOBAL_BENCHMARK_TIERS[tierIndex - 1] : null;
+    const wpmToNext = nextTier ? Math.max(0, nextTier.minWpm - wpm) : 0;
+    const deltaWpm = wpm - mean;
+    const deltaPct = Math.round(((wpm - mean) / mean) * 100);
+
+    let topPctLabel = `Top ${topPct <= 1 ? '1%' : Math.round(topPct) + '%'}`;
+    if (tierIndex === 0) topPctLabel = 'Top 1% Worldwide';
+
+    return {
+        wpm,
+        percentile: fasterThanPct,
+        fasterThanPct,
+        topPct,
+        topPctLabel,
+        tier: currentTier,
+        tierIndex,
+        deltaWpm,
+        deltaPct,
+        nextTier,
+        wpmToNext,
+        tiers: GLOBAL_BENCHMARK_TIERS
+    };
+}
+
 class DataManager {
     constructor() {
         this.settings = this.loadSettings();
@@ -91,11 +214,33 @@ class DataManager {
                 tests.length = 500;
             }
             localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(tests));
+            this.saveLastTest(testResult);
             return testResult;
         } catch (e) {
             console.error('Failed to save test result:', e);
             return null;
         }
+    }
+
+    getLastTest() {
+        try {
+            const raw = sessionStorage.getItem('fasttype_last_test') || localStorage.getItem('fasttype_last_test');
+            if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        const all = this.getAllTests();
+        return all.length > 0 ? all[0] : null;
+    }
+
+    saveLastTest(testRecord) {
+        try {
+            const payload = JSON.stringify(testRecord);
+            sessionStorage.setItem('fasttype_last_test', payload);
+            localStorage.setItem('fasttype_last_test', payload);
+        } catch (e) {}
+    }
+
+    getGlobalBenchmark(wpm) {
+        return calculateGlobalBenchmark(wpm);
     }
 
     deleteTest(testId) {

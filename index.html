@@ -112,6 +112,9 @@
                     <button class="tool-pill" data-mode-type="drill" id="modeDrillBtn" title="Targeted practice focusing on your problem keys">
                         ⚡ Drill
                     </button>
+                    <button class="tool-pill" data-mode-type="ghost" id="modeGhostBtn" title="Ghost Replay: Retake with same text & race your previous test's exact pace">
+                        🔁 Ghost Replay
+                    </button>
                 </div>
 
                 <div class="toolbar-divider"></div>
@@ -147,11 +150,17 @@
                         🔒 Strict
                     </button>
                     
-                    <!-- Pacer with custom WPM -->
+                    <!-- Pacer with custom WPM, PB, and Previous Run Pace -->
                     <div class="pacer-control-wrapper" id="pacerControlWrapper">
                         <div class="pacer-pill-group" id="pacerDisplayGroup">
                             <button class="tool-pill" id="togglePacer" title="Toggle Target Ghost Pacer">
                                 🎯 Pacer (<span id="pacerCurrentWpmDisplay">70</span>)
+                            </button>
+                            <button class="tool-pill pacer-sub-pill" id="btnPacerModePb" title="Set Pacer to match your Personal Best (PB)">
+                                👑 PB
+                            </button>
+                            <button class="tool-pill pacer-sub-pill" id="btnPacerModePrev" title="Set Pacer to replay previous test pace & text">
+                                🔁 Prev
                             </button>
                             <button class="tool-pill" id="btnCustomPacerWpm" title="Edit custom target WPM pace" aria-label="Edit target WPM">
                                 ✏️
@@ -185,6 +194,9 @@
                     </span>
                     <span class="mode-feature-badge pacer" id="pacerBadge" style="display: none;">
                         🎯 Ghost Pacer: <span id="pacerWpmLabel">70</span> WPM
+                    </span>
+                    <span class="mode-feature-badge pacer-replay" id="pacerReplayBadge" style="display: none;">
+                        🔁 Ghost Replay Active (Previous Run Pace &amp; Text)
                     </span>
                 </div>
                 <div id="drillFocusNotice" style="display: none; color: var(--accent-rose); font-weight: 600;">
@@ -364,6 +376,129 @@
                     <canvas id="improvementCanvas"></canvas>
                 </div>
             </div>
+
+            <!-- Worldwide Benchmark & Percentile Standing Section -->
+            <div class="global-benchmark-card" id="globalBenchmarkCard">
+                <div class="benchmark-card-header">
+                    <div class="benchmark-header-left">
+                        <div class="benchmark-tag">
+                            <span class="globe-spin-icon">🌍</span>
+                            <span>Global Typist Benchmark</span>
+                        </div>
+                        <h3 class="benchmark-heading">Worldwide Speed Standing & Percentile</h3>
+                        <p class="benchmark-subheading">
+                            Statistical comparison against the global typist normal distribution (Global Median: 41 WPM, σ: 16.5 WPM)
+                        </p>
+                    </div>
+                    <div class="benchmark-toggle-group">
+                        <span class="toggle-caption">Reference Metric:</span>
+                        <div class="benchmark-pill-switch">
+                            <button class="switch-btn active" id="btnBenchmarkBest" data-metric="best">Best WPM</button>
+                            <button class="switch-btn" id="btnBenchmarkAvg" data-metric="avg">Average WPM</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hero Standings Banner -->
+                <div class="global-hero-grid">
+                    <div class="global-hero-main">
+                        <div class="standing-badge-wrap">
+                            <div class="standing-badge-chip" id="globalStandingBadge">
+                                <span class="standing-icon" id="globalStandingIcon">🏆</span>
+                                <span class="standing-tier-name" id="globalStandingTierText">TOP 10% WORLDWIDE</span>
+                            </div>
+                            <span class="standing-speed-pill" id="globalStandingSpeedPill">0 WPM Reference</span>
+                        </div>
+                        <h4 class="standing-headline" id="globalStandingHeadline">
+                            Faster than <span class="percentile-highlight" id="globalPercentileNum">90%</span> of typists globally
+                        </h4>
+                        <p class="standing-narrative" id="globalStandingNarrative">
+                            Your performance places you in the upper tier of typists internationally.
+                        </p>
+                    </div>
+
+                    <div class="global-kpi-trio">
+                        <div class="global-kpi-item">
+                            <span class="global-kpi-label">Your Reference</span>
+                            <span class="global-kpi-val" id="globalRefVal">0 WPM</span>
+                            <span class="global-kpi-sub" id="globalRefSub">All-time peak</span>
+                        </div>
+                        <div class="global-kpi-item">
+                            <span class="global-kpi-label">Global Average</span>
+                            <span class="global-kpi-val">41 WPM</span>
+                            <span class="global-kpi-sub" id="globalDeltaTag">+0 WPM (Above Avg)</span>
+                        </div>
+                        <div class="global-kpi-item next-tier-highlight">
+                            <span class="global-kpi-label">Next Global Milestone</span>
+                            <span class="global-kpi-val" id="globalNextTierVal">Top 5%</span>
+                            <span class="global-kpi-sub" id="globalNextTierSub">Target: 85 WPM</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual Percentile Distribution Spectrum -->
+                <div class="distribution-spectrum-section">
+                    <div class="spectrum-header">
+                        <span class="spectrum-title">Global Velocity Distribution Spectrum</span>
+                        <span class="spectrum-range-meta">0 WPM to 120+ WPM Scale</span>
+                    </div>
+
+                    <div class="spectrum-bar-wrap">
+                        <div class="spectrum-bar" id="spectrumBar">
+                            <div class="spectrum-seg seg-novice" style="width: 34%;" title="Lower 50% (< 41 WPM)">
+                                <span>Developing (&lt; 41)</span>
+                            </div>
+                            <div class="spectrum-seg seg-average" style="width: 13%;" title="Top 50% (41-55 WPM)">
+                                <span>Top 50% (41)</span>
+                            </div>
+                            <div class="spectrum-seg seg-proficient" style="width: 14%;" title="Top 25% (56-71 WPM)">
+                                <span>Top 25% (56)</span>
+                            </div>
+                            <div class="spectrum-seg seg-master" style="width: 11%;" title="Top 10% (72-84 WPM)">
+                                <span>Top 10% (72)</span>
+                            </div>
+                            <div class="spectrum-seg seg-grandmaster" style="width: 16%;" title="Top 5% (85-109 WPM)">
+                                <span>Top 5% (85)</span>
+                            </div>
+                            <div class="spectrum-seg seg-apex" style="width: 12%;" title="Top 1% (110+ WPM)">
+                                <span>Top 1% (110+)</span>
+                            </div>
+
+                            <!-- Animated User Pointer Marker -->
+                            <div class="spectrum-marker" id="spectrumUserMarker" style="left: 0%;">
+                                <div class="marker-bubble" id="spectrumMarkerBubble">YOU: 0 WPM</div>
+                                <div class="marker-pin"></div>
+                            </div>
+                        </div>
+
+                        <!-- Scale Ticks -->
+                        <div class="spectrum-ticks">
+                            <div class="tick" style="left: 0%;">0</div>
+                            <div class="tick median-tick" style="left: 34%;">41 WPM (Median)</div>
+                            <div class="tick" style="left: 47%;">56 (Top 25%)</div>
+                            <div class="tick" style="left: 61%;">72 (Top 10%)</div>
+                            <div class="tick" style="left: 72%;">85 (Top 5%)</div>
+                            <div class="tick apex-tick" style="left: 88%;">110 (Top 1%)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Benchmark Reference Ladder Table -->
+                <div class="benchmark-ladder-wrap">
+                    <div class="ladder-header-row">
+                        <span>Tier Standing</span>
+                        <span>Percentile</span>
+                        <span>Speed Requirement</span>
+                        <span>Global Population Description</span>
+                        <span style="text-align: right;">Status</span>
+                    </div>
+                    <div class="benchmark-ladder-list" id="benchmarkLadderList">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+            </div>
+
+
 
             <!-- Two-Column Breakdown: Weakness Heatmap & Personal Records -->
             <div class="analytics-two-col">
@@ -550,6 +685,10 @@
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.85rem;">
+                    <div class="global-rank-pill" id="resGlobalRankPill" style="display: none;" title="Your standing vs global typist population">
+                        <span id="resGlobalRankIcon">🌍</span>
+                        <span id="resGlobalRankText">Top 10% Global Pace</span>
+                    </div>
                     <div id="pbBanner" style="display: none;">
                         <span class="pb-badge">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -644,10 +783,19 @@
                     </svg>
                     View Analytics & Heatmap
                 </button>
-                <button class="btn-luxury" id="resNextTestBtn">
-                    <span>Next Test</span>
-                    <span class="key-badge" style="background: rgba(0,0,0,0.25); color: #000; border-color: rgba(0,0,0,0.2);">Tab</span> + <span class="key-badge" style="background: rgba(0,0,0,0.25); color: #000; border-color: rgba(0,0,0,0.2);">Enter</span>
-                </button>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <button class="btn-secondary" id="resRetakeGhostBtn" title="Retake this test with the exact same text and race your previous ghost pace!">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="1 4 1 10 7 10"></polyline>
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                        </svg>
+                        <span>Retake (Ghost Pace)</span>
+                    </button>
+                    <button class="btn-luxury" id="resNextTestBtn">
+                        <span>Next Test</span>
+                        <span class="key-badge" style="background: rgba(0,0,0,0.25); color: #000; border-color: rgba(0,0,0,0.2);">Tab</span> + <span class="key-badge" style="background: rgba(0,0,0,0.25); color: #000; border-color: rgba(0,0,0,0.2);">Enter</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

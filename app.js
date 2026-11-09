@@ -16,30 +16,37 @@ document.addEventListener('DOMContentLoaded', () => {
         words: [],
         currentWordIndex: 0,
         currentCharIndex: 0,
-        
+
         hasStarted: false,
         isFinished: false,
         timerInterval: null,
         elapsedSeconds: 0,
         remainingSeconds: 60,
-        
+
         // Keystroke statistics
         correctChars: 0,
         incorrectChars: 0,
         extraChars: 0,
         missedChars: 0,
         totalKeystrokes: 0,
-        
+
         // Second-by-second telemetry for charts
         timeline: [],
         keyErrors: {}, // { 'e': 3, 'r': 1 }
-        
+
         wordInputs: [],
         drillKeys: [],
-        
+
         currentChartInstance: null,
         trajectoryChartInstance: null,
-        activeAnalyticsFilter: 'all'
+        activeAnalyticsFilter: 'all',
+
+        // Enhanced Features State
+        testState: 'idle', // 'idle' | 'running' | 'finished'
+        pacerMode: 'custom', // 'custom' | 'pb' | 'previous'
+        effectivePacerWpm: 70,
+        previousRun: null, // { words, charTimeline, timeline, wpm }
+        activeBenchmarkMetric: 'best' // 'best' | 'avg'
     };
 
     // Keyboard layout for heatmap
@@ -88,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleStrictMode: document.getElementById('toggleStrictMode'),
         togglePacer: document.getElementById('togglePacer'),
         btnCustomPacerWpm: document.getElementById('btnCustomPacerWpm'),
+        btnPacerModePb: document.getElementById('btnPacerModePb'),
+        btnPacerModePrev: document.getElementById('btnPacerModePrev'),
         pacerCurrentWpmDisplay: document.getElementById('pacerCurrentWpmDisplay'),
         pacerControlWrapper: document.getElementById('pacerControlWrapper'),
         pacerDisplayGroup: document.getElementById('pacerDisplayGroup'),
@@ -100,10 +109,12 @@ document.addEventListener('DOMContentLoaded', () => {
         speedBoosterBar: document.getElementById('speedBoosterBar'),
         strictBadge: document.getElementById('strictBadge'),
         pacerBadge: document.getElementById('pacerBadge'),
+        pacerReplayBadge: document.getElementById('pacerReplayBadge'),
         pacerWpmLabel: document.getElementById('pacerWpmLabel'),
         drillFocusNotice: document.getElementById('drillFocusNotice'),
         drillTargetKeys: document.getElementById('drillTargetKeys'),
         zenNotice: document.getElementById('zenNotice'),
+        modeGhostBtn: document.getElementById('modeGhostBtn'),
 
         // Arena & Live telemetry
         liveCountdown: document.getElementById('liveCountdown'),
@@ -137,9 +148,32 @@ document.addEventListener('DOMContentLoaded', () => {
         resProblemKeysSection: document.getElementById('resProblemKeysSection'),
         resProblemKeysList: document.getElementById('resProblemKeysList'),
         btnDrillFromTest: document.getElementById('btnDrillFromTest'),
+        resRetakeGhostBtn: document.getElementById('resRetakeGhostBtn'),
         resNextTestBtn: document.getElementById('resNextTestBtn'),
         resViewAnalyticsBtn: document.getElementById('resViewAnalyticsBtn'),
         testTrajectoryCanvas: document.getElementById('testTrajectoryCanvas'),
+        resGlobalRankPill: document.getElementById('resGlobalRankPill'),
+        resGlobalRankIcon: document.getElementById('resGlobalRankIcon'),
+        resGlobalRankText: document.getElementById('resGlobalRankText'),
+
+        // Analytics View Elements
+        globalBenchmarkCard: document.getElementById('globalBenchmarkCard'),
+        btnBenchmarkBest: document.getElementById('btnBenchmarkBest'),
+        btnBenchmarkAvg: document.getElementById('btnBenchmarkAvg'),
+        globalStandingBadge: document.getElementById('globalStandingBadge'),
+        globalStandingIcon: document.getElementById('globalStandingIcon'),
+        globalStandingTierText: document.getElementById('globalStandingTierText'),
+        globalStandingSpeedPill: document.getElementById('globalStandingSpeedPill'),
+        globalPercentileNum: document.getElementById('globalPercentileNum'),
+        globalStandingNarrative: document.getElementById('globalStandingNarrative'),
+        globalRefVal: document.getElementById('globalRefVal'),
+        globalRefSub: document.getElementById('globalRefSub'),
+        globalDeltaTag: document.getElementById('globalDeltaTag'),
+        globalNextTierVal: document.getElementById('globalNextTierVal'),
+        globalNextTierSub: document.getElementById('globalNextTierSub'),
+        spectrumUserMarker: document.getElementById('spectrumUserMarker'),
+        spectrumMarkerBubble: document.getElementById('spectrumMarkerBubble'),
+        benchmarkLadderList: document.getElementById('benchmarkLadderList'),
 
         // Analytics View Elements
         rankBadgeIcon: document.getElementById('rankBadgeIcon'),
@@ -226,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.hasStarted = false;
         state.isFinished = false;
+        state.testState = 'idle';
         state.elapsedSeconds = 0;
         state.correctChars = 0;
         state.incorrectChars = 0;
@@ -245,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mode specific setup
         elements.drillFocusNotice.style.display = 'none';
         elements.zenNotice.style.display = 'none';
+        updatePacerWpm();
 
         if (state.modeType === 'time') {
             state.remainingSeconds = state.timeLimit;
@@ -306,6 +342,104 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCaretPosition();
     }
 
+    // Calculate total character count typed so far in stream
+    function getCurrentStreamCharOffset() {
+        let count = 0;
+        const allWords = elements.wordsStream.querySelectorAll('.word');
+        for (let w = 0; w < state.currentWordIndex && w < allWords.length; w++) {
+            count += allWords[w].querySelectorAll('.letter:not(.extra)').length;
+        }
+        count += state.currentCharIndex;
+        return count;
+    }
+
+    // Update Ghost Pacer speed & mode (Custom, PB, or Previous Run)
+    function updatePacerWpm() {
+        const pbs = window.dataManager.getPersonalBests();
+        if (state.pacerMode === 'pb') {
+            let pbVal = 0;
+            if (state.modeType === 'time' && pbs[state.timeLimit]) {
+                pbVal = pbs[state.timeLimit].wpm;
+            } else if (state.modeType === 'words' && pbs[`words_${state.wordsLimit}`]) {
+                pbVal = pbs[`words_${state.wordsLimit}`].wpm;
+            } else if (pbs.overall) {
+                pbVal = pbs.overall.wpm;
+            }
+            state.effectivePacerWpm = pbVal || state.ghostPacerWpm || 70;
+            if (elements.pacerCurrentWpmDisplay) elements.pacerCurrentWpmDisplay.textContent = `PB: ${state.effectivePacerWpm}`;
+            if (elements.pacerWpmLabel) elements.pacerWpmLabel.textContent = `${state.effectivePacerWpm} (PB)`;
+            if (elements.btnPacerModePb) elements.btnPacerModePb.classList.add('active');
+            if (elements.btnPacerModePrev) elements.btnPacerModePrev.classList.remove('active');
+            if (elements.pacerReplayBadge) elements.pacerReplayBadge.style.display = 'none';
+            if (elements.pacerBadge) elements.pacerBadge.style.display = state.ghostPacer ? 'inline-flex' : 'none';
+        } else if (state.pacerMode === 'previous') {
+            const lastTest = state.previousRun || window.dataManager.getLastTest();
+            const prevWpm = lastTest ? (lastTest.wpm || 70) : 70;
+            state.effectivePacerWpm = prevWpm;
+            if (elements.pacerCurrentWpmDisplay) elements.pacerCurrentWpmDisplay.textContent = `Prev: ${prevWpm}`;
+            if (elements.pacerWpmLabel) elements.pacerWpmLabel.textContent = `${prevWpm} (Prev)`;
+            if (elements.btnPacerModePrev) elements.btnPacerModePrev.classList.add('active');
+            if (elements.btnPacerModePb) elements.btnPacerModePb.classList.remove('active');
+            if (elements.pacerBadge) elements.pacerBadge.style.display = 'none';
+            if (elements.pacerReplayBadge) elements.pacerReplayBadge.style.display = state.ghostPacer ? 'inline-flex' : 'none';
+        } else {
+            state.effectivePacerWpm = state.ghostPacerWpm || 70;
+            if (elements.pacerCurrentWpmDisplay) elements.pacerCurrentWpmDisplay.textContent = state.ghostPacerWpm;
+            if (elements.pacerWpmLabel) elements.pacerWpmLabel.textContent = state.ghostPacerWpm;
+            if (elements.btnPacerModePb) elements.btnPacerModePb.classList.remove('active');
+            if (elements.btnPacerModePrev) elements.btnPacerModePrev.classList.remove('active');
+            if (elements.pacerReplayBadge) elements.pacerReplayBadge.style.display = 'none';
+            if (elements.pacerBadge) elements.pacerBadge.style.display = state.ghostPacer ? 'inline-flex' : 'none';
+        }
+    }
+
+    // Retake previous test with exact same text & pacing against previous run
+    function retakePreviousTestWithGhost() {
+        const lastTest = state.previousRun || window.dataManager.getLastTest();
+        if (!lastTest) {
+            alert('No previous typing run found! Complete a test first to race against your ghost.');
+            return;
+        }
+
+        state.pacerMode = 'previous';
+        state.ghostPacer = true;
+        window.dataManager.saveSettings({ ghostPacer: true });
+        if (elements.togglePacer) elements.togglePacer.classList.add('active');
+
+        if (lastTest.mode) state.modeType = lastTest.mode;
+        if (lastTest.duration) state.timeLimit = lastTest.duration;
+        if (lastTest.targetWords) state.wordsLimit = lastTest.targetWords;
+
+        // Sync toolbar pills
+        elements.modeTypeButtons.forEach(b => {
+            b.classList.remove('active');
+            b.classList.remove('drill-active');
+            if (b.dataset.modeType === state.modeType) b.classList.add('active');
+        });
+        if (elements.modeGhostBtn) elements.modeGhostBtn.classList.add('ghost-active');
+
+        // Restore exact same words
+        if (lastTest.words && lastTest.words.length > 0) {
+            state.words = [...lastTest.words];
+        }
+
+        if (!state.previousRun) {
+            const charTimeline = (lastTest.timeline || []).map(t => (t.charOffset !== undefined) ? t.charOffset : Math.round((t.wpm * 5 / 60) * t.second));
+            state.previousRun = {
+                words: [...state.words],
+                charTimeline: charTimeline,
+                timeline: lastTest.timeline || [],
+                wpm: lastTest.wpm || 70,
+                duration: lastTest.duration,
+                mode: lastTest.mode
+            };
+        }
+
+        resetTest(false);
+        updatePacerWpm();
+        focusHiddenInput();
+    }
+
     // Render words to DOM
     function renderWordsStream() {
         // Keep carets in place, clear word elements
@@ -357,10 +491,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 3. Guard against keystrokes when user is typing in any webpage input/textarea
-        const activeTag = document.activeElement ? document.activeElement.tagName : '';
-        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
-            return;
+        // 3. Guard against keystrokes when user is typing in other webpage inputs (e.g. custom pacer editor or settings)
+        if (document.activeElement && document.activeElement !== elements.hiddenTypingInput) {
+            const activeTag = document.activeElement.tagName;
+            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+                return;
+            }
         }
 
         if (e.key === 'Tab') {
@@ -387,9 +523,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Start on first valid keypress
+        // Space at very start before typing any letters should be ignored
+        if (e.key === ' ' && !state.hasStarted) {
+            e.preventDefault();
+            return;
+        }
+
+        // Start test immediately on pressing any letter/character when on the test page
         if (!state.hasStarted) {
-            startTest();
+            if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                state.testState = 'running';
+                startTest();
+            } else {
+                return;
+            }
         }
 
         const currentWordStr = state.words[state.currentWordIndex];
@@ -444,11 +591,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check completion for word count limited modes or drill mode
             const isWordLimitedMode = (state.modeType === 'words' && state.currentWordIndex >= state.wordsLimit) ||
-                                      (state.modeType === 'quotes' && state.currentWordIndex >= state.words.length) ||
-                                      (state.modeType === 'burst' && state.currentWordIndex >= 20) ||
-                                      (state.modeType === 'symbols' && state.currentWordIndex >= 30) ||
-                                      (state.modeType === 'drill' && state.currentWordIndex >= state.words.length) ||
-                                      (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex >= state.words.length);
+                (state.modeType === 'quotes' && state.currentWordIndex >= state.words.length) ||
+                (state.modeType === 'burst' && state.currentWordIndex >= 20) ||
+                (state.modeType === 'symbols' && state.currentWordIndex >= 30) ||
+                (state.modeType === 'drill' && state.currentWordIndex >= state.words.length) ||
+                (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex >= state.words.length);
 
             if (isWordLimitedMode) {
                 finishTest();
@@ -512,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 3. REGULAR CHARACTER INPUT
-        if (e.key.length === 1) {
+        if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
             e.preventDefault();
 
             // STRICT MASTERY MODE: If the user already made a mistake on current or previous letter, force Backspace!
@@ -559,11 +706,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check if last letter of last word
             const isLastWord = (state.modeType === 'words' && state.currentWordIndex === state.wordsLimit - 1) ||
-                               (state.modeType === 'quotes' && state.currentWordIndex === state.words.length - 1) ||
-                               (state.modeType === 'burst' && state.currentWordIndex === 19) ||
-                               (state.modeType === 'symbols' && state.currentWordIndex === 29) ||
-                               (state.modeType === 'drill' && state.currentWordIndex === state.words.length - 1) ||
-                               (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex === state.words.length - 1);
+                (state.modeType === 'quotes' && state.currentWordIndex === state.words.length - 1) ||
+                (state.modeType === 'burst' && state.currentWordIndex === 19) ||
+                (state.modeType === 'symbols' && state.currentWordIndex === 29) ||
+                (state.modeType === 'drill' && state.currentWordIndex === state.words.length - 1) ||
+                (state.modeType !== 'time' && state.modeType !== 'zen' && state.currentWordIndex === state.words.length - 1);
 
             if (isLastWord && state.currentCharIndex >= currentWordStr.length) {
                 finishTest();
@@ -661,8 +808,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const currentWpm = computeNetWpm();
             const currentRaw = computeRawWpm();
+            const charOffset = getCurrentStreamCharOffset();
             state.timeline.push({
                 second: state.elapsedSeconds,
+                charOffset: charOffset,
                 wpm: currentWpm,
                 rawWpm: currentRaw,
                 errors: state.incorrectChars
@@ -673,10 +822,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateGhostPacerPosition() {
-        const targetWpm = Number(state.ghostPacerWpm) || 70;
-        const targetChars = Math.round((targetWpm * 5 / 60) * state.elapsedSeconds);
-
+        let targetChars = 0;
         const allLetters = elements.wordsStream.querySelectorAll('.letter:not(.extra)');
+
+        if (state.pacerMode === 'previous' && state.previousRun && state.previousRun.charTimeline) {
+            const t = state.elapsedSeconds;
+            if (state.previousRun.charTimeline[t] !== undefined) {
+                targetChars = state.previousRun.charTimeline[t];
+            } else if (state.previousRun.charTimeline.length > 0) {
+                targetChars = state.previousRun.charTimeline[state.previousRun.charTimeline.length - 1];
+            } else {
+                const prevWpm = state.previousRun.wpm || 70;
+                targetChars = Math.round((prevWpm * 5 / 60) * state.elapsedSeconds);
+            }
+        } else {
+            const targetWpm = Number(state.effectivePacerWpm || state.ghostPacerWpm) || 70;
+            targetChars = Math.round((targetWpm * 5 / 60) * state.elapsedSeconds);
+        }
+
         if (targetChars < allLetters.length) {
             const targetLetterEl = allLetters[targetChars];
             if (targetLetterEl) {
@@ -687,6 +850,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     elements.ghostCaret.style.left = `${pacerX}px`;
                     elements.ghostCaret.style.top = `${pacerY + 4}px`;
                 }
+            }
+        } else if (allLetters.length > 0) {
+            const lastLetter = allLetters[allLetters.length - 1];
+            const wordParent = lastLetter.closest('.word');
+            if (wordParent) {
+                const pacerX = wordParent.offsetLeft + lastLetter.offsetLeft + lastLetter.offsetWidth;
+                const pacerY = wordParent.offsetTop;
+                elements.ghostCaret.style.left = `${pacerX}px`;
+                elements.ghostCaret.style.top = `${pacerY + 4}px`;
             }
         }
     }
@@ -733,6 +905,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function finishTest() {
         clearInterval(state.timerInterval);
         state.isFinished = true;
+        state.testState = 'finished';
         document.body.classList.remove('is-typing');
         elements.ghostCaret.classList.remove('active');
 
@@ -741,6 +914,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const accuracy = computeAccuracy();
         const consistency = computeConsistency();
         const actualDuration = state.elapsedSeconds;
+
+        const charTimeline = state.timeline.map(t => (t.charOffset !== undefined) ? t.charOffset : Math.round((t.wpm * 5 / 60) * t.second));
+
+        // Save for Ghost Replay
+        state.previousRun = {
+            words: [...state.words],
+            charTimeline: charTimeline,
+            timeline: [...state.timeline],
+            wpm: netWpm,
+            rawWpm: rawWpm,
+            accuracy: accuracy,
+            mode: state.modeType,
+            duration: state.modeType === 'time' ? state.timeLimit : null,
+            targetWords: state.wordsLimit,
+            actualDuration: actualDuration
+        };
 
         const testRecord = {
             id: 'test_' + Date.now(),
@@ -761,7 +950,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 missed: state.missedChars
             },
             keyErrors: { ...state.keyErrors },
-            timeline: [...state.timeline]
+            timeline: [...state.timeline],
+            words: [...state.words],
+            charTimeline: charTimeline
         };
 
         const pbsBefore = window.dataManager.getPersonalBests();
@@ -834,6 +1025,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else {
             elements.resProblemKeysSection.style.display = 'none';
+        }
+
+        // Global Rank Pill in Results Dialog
+        if (elements.resGlobalRankPill) {
+            const bench = window.dataManager.getGlobalBenchmark(record.wpm);
+            if (elements.resGlobalRankText) {
+                elements.resGlobalRankText.textContent = `${bench.topPctLabel} Global Pace`;
+            }
+            if (elements.resGlobalRankIcon) {
+                elements.resGlobalRankIcon.textContent = bench.tier.badge;
+            }
+            elements.resGlobalRankPill.style.display = 'inline-flex';
         }
 
         renderTestTrajectoryChart(record.timeline);
@@ -968,8 +1171,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. Summary KPI Cards
             if (elements.kpiBestWpm) elements.kpiBestWpm.textContent = summary.highestWpm;
             if (elements.kpiBestSub) {
-                elements.kpiBestSub.textContent = pbs.overall 
-                    ? `${pbs.overall.mode === 'time' ? pbs.overall.duration + 's' : (pbs.overall.targetWords || 25) + 'w'} test` 
+                elements.kpiBestSub.textContent = pbs.overall
+                    ? `${pbs.overall.mode === 'time' ? pbs.overall.duration + 's' : (pbs.overall.targetWords || 25) + 'w'} test`
                     : 'Take a test';
             }
 
@@ -1006,6 +1209,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 8. Main Improvement Progression Chart
             renderImprovementChart(state.activeAnalyticsFilter);
+
+            // 9. Worldwide Benchmark & Percentile Standing
+            renderGlobalBenchmarkSection(summary);
 
         } catch (err) {
             console.error('Error refreshing analytics dashboard:', err);
@@ -1323,12 +1529,128 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Render Worldwide Benchmark & Percentile Standing
+    function renderGlobalBenchmarkSection(summary) {
+        if (!elements.globalBenchmarkCard) return;
+
+        const refWpm = (state.activeBenchmarkMetric === 'avg')
+            ? (summary.avgWpm || 0)
+            : (summary.highestWpm || 0);
+
+        const benchmark = window.dataManager.getGlobalBenchmark(refWpm);
+
+        // Update metric toggle buttons
+        if (elements.btnBenchmarkBest) elements.btnBenchmarkBest.classList.toggle('active', state.activeBenchmarkMetric === 'best');
+        if (elements.btnBenchmarkAvg) elements.btnBenchmarkAvg.classList.toggle('active', state.activeBenchmarkMetric === 'avg');
+
+        // Hero Standing Chip & Headline
+        if (elements.globalStandingBadge) {
+            if (elements.globalStandingIcon) elements.globalStandingIcon.textContent = benchmark.tier.badge;
+            if (elements.globalStandingTierText) elements.globalStandingTierText.textContent = benchmark.tier.name.toUpperCase();
+        }
+
+        if (elements.globalStandingSpeedPill) {
+            elements.globalStandingSpeedPill.textContent = `${refWpm} WPM (${state.activeBenchmarkMetric === 'avg' ? 'Average Speed' : 'Personal Best'})`;
+        }
+
+        if (elements.globalPercentileNum) {
+            elements.globalPercentileNum.textContent = `${benchmark.fasterThanPct}%`;
+        }
+
+        if (elements.globalStandingNarrative) {
+            if (refWpm === 0) {
+                elements.globalStandingNarrative.textContent = 'Complete your first typing test to benchmark your typing velocity against the global typist distribution.';
+            } else if (benchmark.tierIndex <= 1) {
+                elements.globalStandingNarrative.innerHTML = `Exceptional velocity! At <strong>${refWpm} WPM</strong>, you rank in the top <strong>${benchmark.topPctLabel}</strong> of typists worldwide, exceeding the global median by <strong>${benchmark.deltaWpm} WPM</strong>.`;
+            } else if (benchmark.deltaWpm >= 0) {
+                elements.globalStandingNarrative.innerHTML = `Your speed of <strong>${refWpm} WPM</strong> places you faster than <strong>${benchmark.fasterThanPct}%</strong> of typists globally, solidly above the worldwide median of 41 WPM.`;
+            } else {
+                elements.globalStandingNarrative.innerHTML = `At <strong>${refWpm} WPM</strong>, you are building your foundational touch typing velocity. Just <strong>${Math.abs(benchmark.deltaWpm)} WPM</strong> away from the global median of 41 WPM.`;
+            }
+        }
+
+        // KPI Trio
+        if (elements.globalRefVal) elements.globalRefVal.textContent = `${refWpm} WPM`;
+        if (elements.globalRefSub) {
+            elements.globalRefSub.textContent = state.activeBenchmarkMetric === 'avg' ? 'Average speed' : 'All-time peak';
+        }
+
+        if (elements.globalDeltaTag) {
+            if (refWpm === 0) {
+                elements.globalDeltaTag.textContent = 'Take a test';
+                elements.globalDeltaTag.className = 'global-kpi-sub';
+            } else if (benchmark.deltaWpm >= 0) {
+                elements.globalDeltaTag.textContent = `+${benchmark.deltaWpm} WPM (+${benchmark.deltaPct}% above median)`;
+                elements.globalDeltaTag.className = 'global-kpi-sub positive';
+            } else {
+                elements.globalDeltaTag.textContent = `${benchmark.deltaWpm} WPM below global average`;
+                elements.globalDeltaTag.className = 'global-kpi-sub negative';
+            }
+        }
+
+        if (elements.globalNextTierVal) {
+            elements.globalNextTierVal.textContent = benchmark.nextTier ? benchmark.nextTier.percentile : 'Apex Rank 🌌';
+        }
+        if (elements.globalNextTierSub) {
+            elements.globalNextTierSub.textContent = benchmark.nextTier
+                ? `${benchmark.wpmToNext} WPM away (Goal: ${benchmark.nextTier.minWpm} WPM)`
+                : 'Highest global tier reached!';
+        }
+
+        // Spectrum User Marker Position (0 to 120+ scale)
+        if (elements.spectrumUserMarker) {
+            const markerPct = Math.min(96, Math.max(4, (refWpm / 120) * 100));
+            elements.spectrumUserMarker.style.left = `${markerPct}%`;
+            if (elements.spectrumMarkerBubble) {
+                elements.spectrumMarkerBubble.textContent = refWpm > 0
+                    ? `YOU: ${refWpm} WPM (${benchmark.topPctLabel})`
+                    : 'YOU: 0 WPM';
+            }
+        }
+
+        // Benchmark Ladder List
+        if (elements.benchmarkLadderList) {
+            elements.benchmarkLadderList.innerHTML = '';
+            benchmark.tiers.forEach((tier, idx) => {
+                const isActive = (idx === benchmark.tierIndex && refWpm > 0);
+                const row = document.createElement('div');
+                row.className = `ladder-row ${isActive ? 'active-tier' : ''}`;
+
+                let statusHtml = '';
+                if (isActive) {
+                    statusHtml = '<span class="status-active-badge">✓ You Are Here</span>';
+                } else if (refWpm >= tier.minWpm && refWpm > 0) {
+                    statusHtml = '<span class="status-gap-text" style="color: var(--accent-emerald);">Surpassed</span>';
+                } else if (refWpm > 0) {
+                    const gap = tier.minWpm - refWpm;
+                    statusHtml = `<span class="status-gap-text">+${gap} WPM needed</span>`;
+                } else {
+                    statusHtml = '<span class="status-gap-text">Goal</span>';
+                }
+
+                row.innerHTML = `
+                    <div class="ladder-tier-name">
+                        <span style="font-size: 1.15rem;">${tier.badge}</span>
+                        <span>${tier.name}</span>
+                    </div>
+                    <div class="ladder-percentile">${tier.percentile}</div>
+                    <div class="ladder-speed">${tier.range}</div>
+                    <div class="ladder-desc">${tier.desc}</div>
+                    <div class="ladder-status">${statusHtml}</div>
+                `;
+                elements.benchmarkLadderList.appendChild(row);
+            });
+        }
+    }
+
     // -------------------------------------------------------------
     // Event Listeners & Interactions
     // -------------------------------------------------------------
     function attachEventListeners() {
         window.addEventListener('keydown', handleKeyDown);
-        elements.wordsCard.addEventListener('click', focusHiddenInput);
+        elements.wordsCard.addEventListener('click', () => {
+            focusHiddenInput();
+        });
 
         elements.restartTestBtn.addEventListener('click', () => {
             resetTest(true);
@@ -1341,6 +1663,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     b.classList.remove('active');
                     b.classList.remove('drill-active');
                 });
+                if (elements.modeGhostBtn) elements.modeGhostBtn.classList.remove('ghost-active');
+
+                // If switching away from previous replay mode, reset pacer mode
+                if (state.pacerMode === 'previous') {
+                    state.pacerMode = 'custom';
+                }
 
                 state.modeType = btn.dataset.modeType;
 
@@ -1365,6 +1693,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetTest(true);
             });
         });
+
+        // Ghost Replay Dedicated Mode Button
+        if (elements.modeGhostBtn) {
+            elements.modeGhostBtn.addEventListener('click', () => {
+                retakePreviousTestWithGhost();
+            });
+        }
 
         // Time limits (15s, 30s, 60s [1m], 120s [2m], 300s [5m])
         elements.timeButtons.forEach(btn => {
@@ -1408,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (elements.settingStrictSelect) elements.settingStrictSelect.value = state.strictMode ? 'true' : 'false';
         });
 
-        // Speed Accelerator: Ghost Target Pacer
+        // Speed Accelerator: Ghost Target Pacer Toggle
         elements.togglePacer.addEventListener('click', () => {
             state.ghostPacer = !state.ghostPacer;
             window.dataManager.saveSettings({ ghostPacer: state.ghostPacer });
@@ -1417,7 +1752,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!state.ghostPacer) {
                 elements.ghostCaret.classList.remove('active');
             }
+            updatePacerWpm();
         });
+
+        // Pacer Personal Best (PB) mode toggle
+        if (elements.btnPacerModePb) {
+            elements.btnPacerModePb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                state.pacerMode = (state.pacerMode === 'pb') ? 'custom' : 'pb';
+                state.ghostPacer = true;
+                window.dataManager.saveSettings({ ghostPacer: true });
+                elements.togglePacer.classList.add('active');
+                updatePacerWpm();
+            });
+        }
+
+        // Pacer Previous Run pace toggle
+        if (elements.btnPacerModePrev) {
+            elements.btnPacerModePrev.addEventListener('click', (e) => {
+                e.stopPropagation();
+                retakePreviousTestWithGhost();
+            });
+        }
 
         // Webpage Input Field for custom Ghost Pacer WPM (Replaces prompt dialog)
         function openPacerEditor() {
@@ -1489,9 +1845,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Close pacer inline editor when clicking outside
         document.addEventListener('click', (e) => {
-            if (elements.pacerControlWrapper && 
-                elements.pacerInlineEditor && 
-                elements.pacerInlineEditor.style.display !== 'none' && 
+            if (elements.pacerControlWrapper &&
+                elements.pacerInlineEditor &&
+                elements.pacerInlineEditor.style.display !== 'none' &&
                 !elements.pacerControlWrapper.contains(e.target)) {
                 savePacerCustomWpm();
             }
@@ -1608,10 +1964,32 @@ document.addEventListener('DOMContentLoaded', () => {
             resetTest(true);
         });
 
+        if (elements.resRetakeGhostBtn) {
+            elements.resRetakeGhostBtn.addEventListener('click', () => {
+                elements.resultsModal.classList.remove('active');
+                retakePreviousTestWithGhost();
+            });
+        }
+
         elements.resViewAnalyticsBtn.addEventListener('click', () => {
             elements.resultsModal.classList.remove('active');
             openAnalyticsDashboard();
         });
+
+        // Global Benchmark Toggle (Best vs Average)
+        if (elements.btnBenchmarkBest) {
+            elements.btnBenchmarkBest.addEventListener('click', () => {
+                state.activeBenchmarkMetric = 'best';
+                refreshAnalyticsData();
+            });
+        }
+
+        if (elements.btnBenchmarkAvg) {
+            elements.btnBenchmarkAvg.addEventListener('click', () => {
+                state.activeBenchmarkMetric = 'avg';
+                refreshAnalyticsData();
+            });
+        }
 
         // Settings Modal
         elements.openSettingsBtn.addEventListener('click', () => {

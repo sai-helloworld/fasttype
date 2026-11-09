@@ -9,16 +9,20 @@ class SoundFX {
     }
 
     init() {
-        if (!this.ctx) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (AudioContext) {
-                this.ctx = new AudioContext();
+        try {
+            if (!this.ctx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    this.ctx = new AudioContext();
+                }
             }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+            this.isAudioUnlocked = true;
+        } catch (_) {
+            // AudioContext may be blocked or restricted
         }
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-        this.isAudioUnlocked = true;
     }
 
     playKeySound(isSpace = false, isError = false) {

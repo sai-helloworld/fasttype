@@ -1144,12 +1144,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function openTypingArena() {
         document.body.classList.remove('analytics-view-active');
         document.body.classList.remove('is-typing');
+        if (elements.resultsModal) elements.resultsModal.classList.remove('active');
         elements.analyticsView.classList.remove('active');
         elements.typingView.style.display = 'flex';
         elements.navAnalyticsView.classList.remove('active');
         elements.navTypingView.classList.add('active');
 
-        focusHiddenInput();
+        if (state.isFinished || state.hasStarted || state.totalKeystrokes > 0) {
+            resetTest(true);
+        } else {
+            focusHiddenInput();
+            updateCaretPosition();
+        }
     }
 
     function refreshAnalyticsData() {
